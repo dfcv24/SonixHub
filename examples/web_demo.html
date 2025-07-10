@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SonixHub TTS Web Demo</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #555;
+        }
+        
+        input[type="text"], textarea, select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 16px;
+            box-sizing: border-box;
+        }
+        
+        textarea {
+            height: 120px;
+            resize: vertical;
+        }
+        
+        input[type="range"] {
+            width: 100%;
+        }
+        
+        button {
+            background-color: #007bff;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+            margin-right: 10px;
+            margin-bottom: 10px;
+        }
+        
+        button:hover {
+            background-color: #0056b3;
+        }
+        
+        button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+        
+        .status {
+            margin-top: 20px;
+            padding: 10px;
+            border-radius: 5px;
+            display: none;
+        }
+        
+        .status.success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .status.error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .status.info {
+            background-color: #cce7ff;
+            color: #004085;
+            border: 1px solid #b8daff;
+        }
+        
+        .audio-controls {
+            margin-top: 20px;
+            text-align: center;
+        }
+        
+        audio {
+            width: 100%;
+            margin-top: 10px;
+        }
+        
+        .parameter-group {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-top: 20px;
+        }
+        
+        .parameter-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        
+        .parameter-item label {
+            margin-bottom: 0;
+            margin-right: 10px;
+        }
+        
+        .parameter-value {
+            font-weight: bold;
+            color: #007bff;
+            min-width: 40px;
+            text-align: right;
+        }
+        
+        .file-upload {
+            position: relative;
+            display: inline-block;
+            cursor: pointer;
+            width: 100%;
+        }
+        
+        .file-upload input[type="file"] {
+            position: absolute;
+            left: -9999px;
+        }
+        
+        .file-upload-label {
+            display: block;
+            padding: 10px;
+            background-color: #f8f9fa;
+            border: 2px dashed #dee2e6;
+            border-radius: 5px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .file-upload-label:hover {
+            border-color: #007bff;
+            background-color: #e7f3ff;
+        }
+        
+        .examples {
+            margin-top: 30px;
+        }
+        
+        .example-item {
+            background-color: #f8f9fa;
+            padding: 10px;
+            margin-bottom: 10px;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        
+        .example-item:hover {
+            background-color: #e9ecef;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎙️ SonixHub TTS Web Demo</h1>
+        
+        <div class="form-group">
+            <label for="serverUrl">服务器地址:</label>
+            <input type="text" id="serverUrl" value="http://localhost:8000" placeholder="http://localhost:8000">
+        </div>
+        
+        <div class="form-group">
+            <label for="inputText">要合成的文本:</label>
+            <textarea id="inputText" placeholder="请输入要合成的文本...">你好，欢迎使用SonixHub语音合成服务！</textarea>
+        </div>
+        
+        <div class="form-group">
+            <label for="textLanguage">文本语言:</label>
+            <select id="textLanguage">
+                <option value="zh">中文</option>
+                <option value="en">英文</option>
+                <option value="ja">日文</option>
+                <option value="auto">自动识别</option>
+            </select>
+        </div>
+        
+        <div class="form-group">
+            <label for="referenceAudio">参考音频文件 (可选):</label>
+            <div class="file-upload">
+                <input type="file" id="referenceAudio" accept="audio/*">
+                <label for="referenceAudio" class="file-upload-label">
+                    <span id="fileUploadText">点击选择音频文件或拖拽文件到此处</span>
+                </label>
+            </div>
+        </div>
+        
+        <div class="form-group">
+            <label for="promptText">参考音频对应文本:</label>
+            <input type="text" id="promptText" placeholder="参考音频对应的文字内容">
+        </div>
+        
+        <div class="parameter-group">
+            <div class="parameter-item">
+                <label for="temperature">Temperature:</label>
+                <input type="range" id="temperature" min="0.1" max="1.5" step="0.1" value="0.6">
+                <span class="parameter-value" id="temperatureValue">0.6</span>
+            </div>
+            
+            <div class="parameter-item">
+                <label for="speed">语速:</label>
+                <input type="range" id="speed" min="0.5" max="2.0" step="0.1" value="1.0">
+                <span class="parameter-value" id="speedValue">1.0</span>
+            </div>
+            
+            <div class="parameter-item">
+                <label for="topK">Top K:</label>
+                <input type="range" id="topK" min="1" max="100" step="1" value="20">
+                <span class="parameter-value" id="topKValue">20</span>
+            </div>
+            
+            <div class="parameter-item">
+                <label for="topP">Top P:</label>
+                <input type="range" id="topP" min="0.1" max="1.0" step="0.1" value="0.6">
+                <span class="parameter-value" id="topPValue">0.6</span>
+            </div>
+        </div>
+        
+        <div class="form-group">
+            <button id="synthesizeBtn" onclick="synthesizeText()">🎵 合成语音</button>
+            <button id="checkStatusBtn" onclick="checkStatus()">📊 检查状态</button>
+            <button id="getLanguagesBtn" onclick="getLanguages()">🌐 获取语言</button>
+        </div>
+        
+        <div id="status" class="status"></div>
+        
+        <div class="audio-controls">
+            <audio id="audioPlayer" controls style="display: none;"></audio>
+        </div>
+        
+        <div class="examples">
+            <h3>示例文本:</h3>
+            <div class="example-item" onclick="setExampleText('你好，欢迎使用SonixHub语音合成服务！这是一个基于GPT-SoVITS的高质量语音合成系统。')">
+                中文示例：欢迎使用语音合成服务
+            </div>
+            <div class="example-item" onclick="setExampleText('Hello, welcome to SonixHub TTS service! This is a high-quality text-to-speech system based on GPT-SoVITS.')">
+                英文示例：Welcome to TTS service
+            </div>
+            <div class="example-item" onclick="setExampleText('今天天气真不错，阳光明媚，微风徐来。正是出门散步的好时光，让我们一起享受这美好的午后时光吧！')">
+                中文示例：天气描述
+            </div>
+            <div class="example-item" onclick="setExampleText('人工智能技术的发展为我们带来了许多便利，语音合成技术就是其中之一。它能够将文字转换为自然流畅的语音，帮助人们更好地获取信息。')">
+                中文示例：技术介绍
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 更新参数值显示
+        function updateParameterValues() {
+            document.getElementById('temperatureValue').textContent = document.getElementById('temperature').value;
+            document.getElementById('speedValue').textContent = document.getElementById('speed').value;
+            document.getElementById('topKValue').textContent = document.getElementById('topK').value;
+            document.getElementById('topPValue').textContent = document.getElementById('topP').value;
+        }
+        
+        // 绑定参数滑块事件
+        document.getElementById('temperature').addEventListener('input', updateParameterValues);
+        document.getElementById('speed').addEventListener('input', updateParameterValues);
+        document.getElementById('topK').addEventListener('input', updateParameterValues);
+        document.getElementById('topP').addEventListener('input', updateParameterValues);
+        
+        // 文件上传处理
+        document.getElementById('referenceAudio').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                document.getElementById('fileUploadText').textContent = file.name;
+            } else {
+                document.getElementById('fileUploadText').textContent = '点击选择音频文件或拖拽文件到此处';
+            }
+        });
+        
+        // 显示状态信息
+        function showStatus(message, type = 'info') {
+            const statusDiv = document.getElementById('status');
+            statusDiv.textContent = message;
+            statusDiv.className = `status ${type}`;
+            statusDiv.style.display = 'block';
+            
+            // 3秒后自动隐藏
+            setTimeout(() => {
+                statusDiv.style.display = 'none';
+            }, 3000);
+        }
+        
+        // 设置示例文本
+        function setExampleText(text) {
+            document.getElementById('inputText').value = text;
+            
+            // 根据文本内容自动设置语言
+            const hasChineseChar = /[\u4e00-\u9fa5]/.test(text);
+            const hasEnglishChar = /[a-zA-Z]/.test(text);
+            
+            if (hasChineseChar && hasEnglishChar) {
+                document.getElementById('textLanguage').value = 'zh';
+            } else if (hasChineseChar) {
+                document.getElementById('textLanguage').value = 'zh';
+            } else if (hasEnglishChar) {
+                document.getElementById('textLanguage').value = 'en';
+            }
+        }
+        
+        // 检查服务状态
+        async function checkStatus() {
+            const serverUrl = document.getElementById('serverUrl').value;
+            showStatus('正在检查服务状态...', 'info');
+            
+            try {
+                const response = await fetch(`${serverUrl}/status`);
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showStatus(`服务状态: ${data.status}, 模型版本: ${data.model_version}, 设备: ${data.device}`, 'success');
+                } else {
+                    showStatus('服务状态检查失败', 'error');
+                }
+            } catch (error) {
+                showStatus(`连接服务器失败: ${error.message}`, 'error');
+            }
+        }
+        
+        // 获取支持的语言
+        async function getLanguages() {
+            const serverUrl = document.getElementById('serverUrl').value;
+            showStatus('正在获取语言列表...', 'info');
+            
+            try {
+                const response = await fetch(`${serverUrl}/languages`);
+                const data = await response.json();
+                
+                if (response.ok) {
+                    const languages = data.language_codes.join(', ');
+                    showStatus(`支持的语言: ${languages}`, 'success');
+                } else {
+                    showStatus('获取语言列表失败', 'error');
+                }
+            } catch (error) {
+                showStatus(`连接服务器失败: ${error.message}`, 'error');
+            }
+        }
+        
+        // 语音合成
+        async function synthesizeText() {
+            const serverUrl = document.getElementById('serverUrl').value;
+            const text = document.getElementById('inputText').value.trim();
+            
+            if (!text) {
+                showStatus('请输入要合成的文本', 'error');
+                return;
+            }
+            
+            const synthesizeBtn = document.getElementById('synthesizeBtn');
+            synthesizeBtn.disabled = true;
+            synthesizeBtn.textContent = '正在合成...';
+            
+            showStatus('正在合成语音，请稍候...', 'info');
+            
+            try {
+                const referenceAudio = document.getElementById('referenceAudio').files[0];
+                
+                if (referenceAudio) {
+                    // 使用上传的参考音频
+                    await synthesizeWithUpload(serverUrl, text, referenceAudio);
+                } else {
+                    // 使用默认参考音频
+                    await synthesizeWithDefault(serverUrl, text);
+                }
+                
+            } catch (error) {
+                showStatus(`合成失败: ${error.message}`, 'error');
+            } finally {
+                synthesizeBtn.disabled = false;
+                synthesizeBtn.textContent = '🎵 合成语音';
+            }
+        }
+        
+        // 使用默认参考音频合成
+        async function synthesizeWithDefault(serverUrl, text) {
+            const payload = {
+                text: text,
+                text_language: document.getElementById('textLanguage').value,
+                temperature: parseFloat(document.getElementById('temperature').value),
+                speed: parseFloat(document.getElementById('speed').value),
+                top_k: parseInt(document.getElementById('topK').value),
+                top_p: parseFloat(document.getElementById('topP').value)
+            };
+            
+            const promptText = document.getElementById('promptText').value.trim();
+            if (promptText) {
+                payload.prompt_text = promptText;
+            }
+            
+            const response = await fetch(`${serverUrl}/tts`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(payload)
+            });
+            
+            if (response.ok) {
+                const audioBlob = await response.blob();
+                playAudio(audioBlob);
+                showStatus('语音合成成功！', 'success');
+            } else {
+                const errorText = await response.text();
+                throw new Error(`HTTP ${response.status}: ${errorText}`);
+            }
+        }
+        
+        // 使用上传的参考音频合成
+        async function synthesizeWithUpload(serverUrl, text, referenceAudio) {
+            const formData = new FormData();
+            formData.append('text', text);
+            formData.append('text_language', document.getElementById('textLanguage').value);
+            formData.append('refer_audio', referenceAudio);
+            formData.append('temperature', document.getElementById('temperature').value);
+            formData.append('speed', document.getElementById('speed').value);
+            formData.append('top_k', document.getElementById('topK').value);
+            formData.append('top_p', document.getElementById('topP').value);
+            
+            const promptText = document.getElementById('promptText').value.trim();
+            if (promptText) {
+                formData.append('prompt_text', promptText);
+                formData.append('prompt_language', document.getElementById('textLanguage').value);
+            }
+            
+            const response = await fetch(`${serverUrl}/tts/upload`, {
+                method: 'POST',
+                body: formData
+            });
+            
+            if (response.ok) {
+                const audioBlob = await response.blob();
+                playAudio(audioBlob);
+                showStatus('语音合成成功！', 'success');
+            } else {
+                const errorText = await response.text();
+                throw new Error(`HTTP ${response.status}: ${errorText}`);
+            }
+        }
+        
+        // 播放音频
+        function playAudio(audioBlob) {
+            const audioPlayer = document.getElementById('audioPlayer');
+            const audioUrl = URL.createObjectURL(audioBlob);
+            
+            audioPlayer.src = audioUrl;
+            audioPlayer.style.display = 'block';
+            audioPlayer.play();
+            
+            // 添加下载链接
+            const downloadLink = document.createElement('a');
+            downloadLink.href = audioUrl;
+            downloadLink.download = 'synthesized_speech.wav';
+            downloadLink.textContent = '下载音频';
+            downloadLink.style.marginLeft = '10px';
+            
+            const audioControls = document.querySelector('.audio-controls');
+            const existingLink = audioControls.querySelector('a');
+            if (existingLink) {
+                existingLink.remove();
+            }
+            audioControls.appendChild(downloadLink);
+        }
+        
+        // 页面加载完成后检查服务状态
+        window.addEventListener('load', function() {
+            checkStatus();
+        });
+    </script>
+</body>
+</html>

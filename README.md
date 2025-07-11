@@ -27,9 +27,7 @@ git clone https://github.com/your-repo/SonixHub.git
 cd SonixHub
 
 # 创建虚拟环境
-python -m venv venv
-source venv/bin/activate  # Linux/Mac
-# 或者 venv\Scripts\activate  # Windows
+conda env create -n SonixHub python=3.10
 
 # 安装依赖
 pip install -r requirements.txt
@@ -44,13 +42,11 @@ pip install -r requirements.txt
 ### 启动服务
 
 ```bash
-# 方式1：使用启动脚本
-./start.sh
 
-# 方式2：直接运行
+# 方式1：直接运行
 python tts_api_service.py --host 0.0.0.0 --port 8000
 
-# 方式3：开发模式（自动重载）
+# 方式2：开发模式（自动重载）
 python tts_api_service.py --host 0.0.0.0 --port 8000 --reload
 ```
 

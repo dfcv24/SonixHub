@@ -21,25 +21,39 @@ from transformers import AutoModelForMaskedLM, AutoTokenizer
 # 屏蔽警告
 warnings.filterwarnings("ignore")
 
-# 添加GPT-SoVITS路径
-current_dir = os.path.dirname(os.path.abspath(__file__))
-gpt_sovits_dir = os.path.join(current_dir, "GPT-SoVITS")
-sys.path.insert(0, gpt_sovits_dir)
-sys.path.insert(0, os.path.join(gpt_sovits_dir, "GPT_SoVITS"))
-sys.path.insert(0, os.path.join(gpt_sovits_dir, "GPT_SoVITS", "eres2net"))
+# 导入路径配置
+from path_config import get_base_paths, get_model_paths, setup_environment
 
-# try:
-# GPT-SoVITS 相关导入
+# 设置环境变量
+setup_environment()
+
+# 添加GPT-SoVITS路径
+try:
+    base_paths = get_base_paths()
+    gpt_sovits_dir = base_paths["gpt_sovits_dir"]
+    
+    sys.path.insert(0, gpt_sovits_dir)
+    sys.path.insert(0, os.path.join(gpt_sovits_dir, "GPT_SoVITS"))
+    sys.path.insert(0, os.path.join(gpt_sovits_dir, "GPT_SoVITS", "eres2net"))
+    
+
+except Exception as e:
+    print(f"路径配置错误: {e}")
+    sys.exit(1)
+
+os.environ["cnhubert_base_path"] = base_paths["cnhubert_path"]
+print("CNHubert基础路径已设置:", os.environ["cnhubert_base_path"])
+
+# 导入GPT-SoVITS模块
 from feature_extractor import cnhubert
 from AR.models.t2s_lightning_module import Text2SemanticLightningModule
 from module.models import SynthesizerTrn, SynthesizerTrnV3, Generator
-from module.mel_processing import spectrogram_torch, mel_spectrogram_torch
-from text import cleaned_text_to_sequence
-from text.cleaner import clean_text
-from text.LangSegmenter import LangSegmenter
 from process_ckpt import get_sovits_version_from_path_fast, load_sovits_new
-from sv import SV
-from peft import LoraConfig, get_peft_model
+
+from gpt_sovits_fixed.inference_webui_fixed import get_phones_and_bert, get_spepc
+from gpt_sovits_fixed.cleaner_fixed import clean_text
+from gpt_sovits_fixed.sv_fixed import SV
+
 
 # 尝试导入BigVGAN
 try:
@@ -47,11 +61,7 @@ try:
     BIGVGAN_AVAILABLE = True
 except ImportError:
     BIGVGAN_AVAILABLE = False
-        
-# except ImportError as e:
-#     print(f"导入GPT-SoVITS模块时出错: {e}")
-#     print("请确保GPT-SoVITS目录存在并且路径正确")
-#     sys.exit(1)
+
 
 
 class DictToAttrRecursive(dict):
@@ -137,21 +147,33 @@ class TTSCore:
     
     def _load_models(self, gpt_path: str, sovits_path: str):
         """加载模型"""
-        # 设置模型路径
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        pretrained_dir = os.path.join(current_dir, "GPT-SoVITS", "GPT_SoVITS", "pretrained_models")
-        
-        # 默认模型路径
-        if not gpt_path:
-            gpt_path = os.path.join(pretrained_dir, "s1bert25hz-2kh-longer-epoch=68e-step=50232.ckpt")
-        if not sovits_path:
-            sovits_path = os.path.join(pretrained_dir, "s2G488k.pth")
+        # 使用配置的模型路径
+        try:
+            model_paths = get_model_paths()
+            
+            # 如果没有指定路径，使用配置中的路径
+            if not gpt_path:
+                gpt_path = model_paths["gpt_path"]
+            if not sovits_path:
+                sovits_path = model_paths["sovits_path"]
+                
+            cnhubert_base_path = model_paths["cnhubert_path"]
+            bert_path = model_paths["bert_path"]
+            
+            print(f"使用GPT模型: {os.path.basename(gpt_path)}")
+            print(f"使用SoVITS模型: {os.path.basename(sovits_path)}")
+            print(f"CNHubert: {'已配置' if os.path.exists(cnhubert_base_path) else '未找到'}")
+            print(f"BERT: {'已配置' if os.path.exists(bert_path) else '未找到'}")
+            
+        except Exception as e:
+            print(f"获取模型路径失败: {e}")
+            return
             
         # 加载BERT模型
-        self._load_bert_model(pretrained_dir)
+        self._load_bert_model(bert_path)
         
         # 加载SSL模型
-        self._load_ssl_model()
+        self._load_ssl_model(cnhubert_base_path)
         
         # 加载GPT模型
         if os.path.exists(gpt_path):
@@ -165,9 +187,8 @@ class TTSCore:
         else:
             print(f"SoVITS模型文件不存在: {sovits_path}")
     
-    def _load_bert_model(self, pretrained_dir: str):
+    def _load_bert_model(self, bert_path: str):
         """加载BERT模型"""
-        bert_path = os.path.join(pretrained_dir, "chinese-roberta-wwm-ext-large")
         if not os.path.exists(bert_path):
             print(f"BERT模型路径不存在: {bert_path}")
             return
@@ -182,9 +203,11 @@ class TTSCore:
         except Exception as e:
             print(f"加载BERT模型失败: {e}")
     
-    def _load_ssl_model(self):
+    def _load_ssl_model(self, cnhubert_base_path: str):
         """加载SSL模型"""
         try:
+            # 设置cnhubert的基础路径
+            cnhubert.cnhubert_base_path = cnhubert_base_path
             self.ssl_model = cnhubert.get_model()
             if self.is_half:
                 self.ssl_model = self.ssl_model.half()
@@ -192,6 +215,17 @@ class TTSCore:
             print("SSL模型加载成功")
         except Exception as e:
             print(f"加载SSL模型失败: {e}")
+            print(f"请检查cnhubert路径: {cnhubert_base_path}")
+            # 尝试默认路径
+            try:
+                self.ssl_model = cnhubert.get_model()
+                if self.is_half:
+                    self.ssl_model = self.ssl_model.half()
+                self.ssl_model = self.ssl_model.to(self.device)
+                print("使用默认cnhubert模型加载成功")
+            except Exception as e2:
+                print(f"使用默认路径也失败: {e2}")
+                self.ssl_model = None
     
     def _load_gpt_model(self, gpt_path: str):
         """加载GPT模型"""
@@ -213,8 +247,14 @@ class TTSCore:
     def _load_sovits_model(self, sovits_path: str):
         """加载SoVITS模型"""
         try:
-            # 获取模型版本信息
-            self.version, self.model_version, if_lora_v3 = get_sovits_version_from_path_fast(sovits_path)
+            # 获取模型版本信息 - 使用GPT-SoVITS的原生函数
+            try:
+                self.version, self.model_version, if_lora_v3 = get_sovits_version_from_path_fast(sovits_path)
+                print(f"检测到模型: {self.model_version} ({self.version})")
+            except Exception as e:
+                print(f"版本检测失败，使用默认版本: {e}")
+                self.version = "v2"
+                self.model_version = "v2Pro"
             
             # 加载模型权重
             dict_s2 = load_sovits_new(sovits_path)
@@ -222,15 +262,20 @@ class TTSCore:
             self.hps = DictToAttrRecursive(self.hps)
             self.hps.model.semantic_frame_rate = "25hz"
             
-            # 确定版本
+            # 确定版本（保持原有的版本检测逻辑作为备份）
             if "enc_p.text_embedding.weight" not in dict_s2["weight"]:
-                self.hps.model.version = "v2"
+                detected_version = "v2"
             elif dict_s2["weight"]["enc_p.text_embedding.weight"].shape[0] == 322:
-                self.hps.model.version = "v1"
+                detected_version = "v1"
             else:
-                self.hps.model.version = "v2"
+                detected_version = "v2"
             
-            self.version = self.hps.model.version
+            # 如果自动检测失败，使用权重分析的结果
+            if self.version is None:
+                self.version = detected_version
+                
+            self.hps.model.version = self.model_version
+            print(f"最终版本: {self.model_version}")
             
             # 创建模型
             if self.model_version in {"v3", "v4"}:
@@ -341,112 +386,43 @@ class TTSCore:
     def get_bert_feature(self, text: str, word2ph: List[int]) -> torch.Tensor:
         """获取BERT特征"""
         if not self.bert_model or not self.tokenizer:
+            # 根据版本返回正确维度的零tensor
+            bert_dim = 1024 if self.version == "v1" else 768
             return torch.zeros(
-                (1024, len(word2ph)), 
+                (bert_dim, sum(word2ph)), 
                 dtype=torch.float16 if self.is_half else torch.float32
             ).to(self.device)
         
-        with torch.no_grad():
-            inputs = self.tokenizer(text, return_tensors="pt")
-            for key in inputs:
-                inputs[key] = inputs[key].to(self.device)
-            res = self.bert_model(**inputs, output_hidden_states=True)
-            res = torch.cat(res["hidden_states"][-3:-2], -1)[0].cpu()[1:-1]
-        
-        phone_level_feature = []
-        for i in range(len(word2ph)):
-            repeat_feature = res[i].repeat(word2ph[i], 1)
-            phone_level_feature.append(repeat_feature)
-        
-        phone_level_feature = torch.cat(phone_level_feature, dim=0)
-        return phone_level_feature.T
-    
-    def get_phones_and_bert(self, text: str, language: str, final: bool = False) -> Tuple[List[int], torch.Tensor, str]:
-        """获取音素和BERT特征"""
-        if not text.strip():
-            return [], torch.zeros((1024, 0)), ""
-        
-        # 文本处理
-        text = re.sub(r' {2,}', ' ', text)
-        
-        # 语言分割
-        if language == "all_zh":
-            textlist = [{"lang": "zh", "text": text}]
-        elif language == "en":
-            textlist = [{"lang": "en", "text": text}]
-        elif language == "auto":
-            textlist = [{"lang": "zh", "text": text}]  # 简化处理
-        else:
-            textlist = [{"lang": language, "text": text}]
-        
-        phones_list = []
-        bert_list = []
-        norm_text_list = []
-        
-        for item in textlist:
-            lang = item["lang"]
-            phones, word2ph, norm_text = clean_text(item["text"], lang, self.version)
-            phones = cleaned_text_to_sequence(phones, self.version)
-            
-            # 获取BERT特征
-            if lang == "zh":
-                bert = self.get_bert_feature(norm_text, word2ph).to(self.device)
-            else:
-                bert = torch.zeros(
-                    (1024, len(phones)),
-                    dtype=torch.float16 if self.is_half else torch.float32,
-                ).to(self.device)
-            
-            phones_list.append(phones)
-            bert_list.append(bert)
-            norm_text_list.append(norm_text)
-        
-        # 合并结果
-        bert = torch.cat(bert_list, dim=1) if bert_list else torch.zeros((1024, 0))
-        phones = sum(phones_list, [])
-        norm_text = "".join(norm_text_list)
-        
-        return phones, bert, norm_text
-    
-    def get_spepc(self, audio_path: str) -> Tuple[torch.Tensor, torch.Tensor]:
-        """获取音频频谱"""
         try:
-            sr1 = int(self.hps.data.sampling_rate)
-            audio, sr0 = torchaudio.load(audio_path)
+            with torch.no_grad():
+                inputs = self.tokenizer(text, return_tensors="pt")
+                for key in inputs:
+                    inputs[key] = inputs[key].to(self.device)
+                res = self.bert_model(**inputs, output_hidden_states=True)
+                
+                # 根据版本选择层
+                if self.version == "v1":
+                    res = torch.cat(res["hidden_states"][-3:-2], -1)[0].cpu()[1:-1]
+                else:
+                    res = res["hidden_states"][-1][0].cpu()[1:-1]
             
-            # 重采样
-            if sr0 != sr1:
-                audio = torchaudio.functional.resample(audio, sr0, sr1)
+            assert len(word2ph) == len(text), f"word2ph length {len(word2ph)} != text length {len(text)}"
             
-            # 转单声道
-            if audio.shape[0] == 2:
-                audio = audio.mean(0).unsqueeze(0)
+            phone_level_feature = []
+            for i in range(len(word2ph)):
+                repeat_feature = res[i].repeat(word2ph[i], 1)
+                phone_level_feature.append(repeat_feature)
             
-            audio = audio.to(self.device)
-            
-            # 音量归一化
-            maxx = audio.abs().max()
-            if maxx > 1:
-                audio /= min(2, maxx)
-            
-            # 计算频谱
-            spec = spectrogram_torch(
-                audio,
-                self.hps.data.filter_length,
-                self.hps.data.sampling_rate,
-                self.hps.data.hop_length,
-                self.hps.data.win_length,
-                center=False,
-            )
-            
-            dtype = torch.float16 if self.is_half else torch.float32
-            spec = spec.to(dtype)
-            
-            return spec, audio
-            
+            phone_level_feature = torch.cat(phone_level_feature, dim=0)
+            return phone_level_feature.T.to(self.device)
+                
         except Exception as e:
-            print(f"处理音频文件失败: {e}")
-            raise
+            print(f"BERT特征提取失败: {e}")
+            bert_dim = 1024 if self.version == "v1" else 768
+            return torch.zeros(
+                (bert_dim, sum(word2ph)), 
+                dtype=torch.float16 if self.is_half else torch.float32
+            ).to(self.device)
     
     def synthesize(self, 
                    text: str,
@@ -458,23 +434,10 @@ class TTSCore:
                    top_p: float = 0.6,
                    temperature: float = 0.6,
                    speed: float = 1.0,
+                   ref_free: bool = False,
                    **kwargs) -> Tuple[int, np.ndarray]:
         """
-        语音合成
-        
-        Args:
-            text: 要合成的文本
-            text_language: 文本语言
-            refer_wav_path: 参考音频路径
-            prompt_text: 参考文本
-            prompt_language: 参考语言
-            top_k: GPT采样参数
-            top_p: GPT采样参数
-            temperature: GPT采样参数
-            speed: 语速
-            
-        Returns:
-            采样率和音频数据
+        语音合成 - 完全参考inference_webui.py实现
         """
         if not self.vq_model or not self.t2s_model:
             raise RuntimeError("模型未正确加载")
@@ -486,29 +449,40 @@ class TTSCore:
         prompt_language = self.dict_language.get(prompt_language, prompt_language)
         text_language = self.dict_language.get(text_language, text_language)
         
+        # 检查是否使用无参考文本模式
+        if prompt_text is None or len(prompt_text) == 0:
+            ref_free = True
+        
         # 处理参考音频
-        with torch.no_grad():
-            wav16k, sr = librosa.load(refer_wav_path, sr=16000)
-            wav16k = torch.from_numpy(wav16k)
-            
-            if self.is_half:
-                wav16k = wav16k.half()
-            wav16k = wav16k.to(self.device)
-            
-            # 提取语义特征
-            ssl_content = self.ssl_model.model(wav16k.unsqueeze(0))["last_hidden_state"].transpose(1, 2)
-            codes = self.vq_model.extract_latent(ssl_content)
-            prompt_semantic = codes[0, 0].unsqueeze(0).to(self.device)
+        if not ref_free:
+            with torch.no_grad():
+                wav16k, sr = librosa.load(refer_wav_path, sr=16000)
+                wav16k = torch.from_numpy(wav16k)
+                if self.is_half:
+                    wav16k = wav16k.half()
+                wav16k = wav16k.to(self.device)
+                
+                ssl_content = self.ssl_model.model(wav16k.unsqueeze(0))["last_hidden_state"].transpose(1, 2)
+                codes = self.vq_model.extract_latent(ssl_content)
+                prompt_semantic = codes[0, 0]
+                prompt = prompt_semantic.unsqueeze(0).to(self.device)
         
-        # 处理文本
-        if prompt_text:
-            phones1, bert1, norm_text1 = self.get_phones_and_bert(prompt_text, prompt_language)
-        else:
-            phones1, bert1, norm_text1 = [], torch.zeros((1024, 0)), ""
+        # 处理文本 - 按照原始逻辑
+        if not ref_free:
+            # 处理参考文本
+            prompt_text = prompt_text.strip("\n")
+            if prompt_text[-1] not in self.splits:
+                prompt_text += "。" if prompt_language != "en" else "."
+            phones1, bert1, norm_text1 = get_phones_and_bert(prompt_text, prompt_language, self.version)
         
-        phones2, bert2, norm_text2 = self.get_phones_and_bert(text, text_language)
+        # 处理目标文本
+        text = text.strip("\n")
+        if text[-1] not in self.splits:
+            text += "。" if text_language != "en" else "."
         
-        if prompt_text:
+        phones2, bert2, norm_text2 = get_phones_and_bert(text, text_language, self.version)
+        
+        if not ref_free:
             bert = torch.cat([bert1, bert2], 1)
             all_phoneme_ids = torch.LongTensor(phones1 + phones2).to(self.device).unsqueeze(0)
         else:
@@ -523,7 +497,7 @@ class TTSCore:
             pred_semantic, idx = self.t2s_model.model.infer_panel(
                 all_phoneme_ids,
                 all_phoneme_len,
-                prompt_semantic if prompt_text else None,
+                None if ref_free else prompt,
                 bert,
                 top_k=top_k,
                 top_p=top_p,
@@ -532,13 +506,28 @@ class TTSCore:
             )
             pred_semantic = pred_semantic[:, -idx:].unsqueeze(0)
         
-        # 音频生成
-        refers, audio_tensor = self.get_spepc(refer_wav_path)
+        # 音频解码
+        dtype = torch.float32 if not self.is_half else torch.float16
+        refers, refer_audio = get_spepc(self.hps, refer_wav_path, dtype, self.device, True)
         refers = [refers]
+        # 计算说话人嵌入
+        with torch.no_grad():
+            sv_emb = [self.sv_cn_model.compute_embedding3(refer_audio)]
         
-        audio = self.vq_model.decode(
-            pred_semantic, torch.LongTensor(phones2).to(self.device).unsqueeze(0), refers, speed=speed
-        )[0][0]
+        # 为v2pro和v2ProPlus模型计算sv_emb
+        if self.model_version in {"v2Pro", "v2ProPlus"} and self.sv_cn_model:            
+            audio = self.vq_model.decode(
+                pred_semantic, 
+                torch.LongTensor(phones2).to(self.device).unsqueeze(0), 
+                refers, 
+                speed=speed,
+                sv_emb=sv_emb
+            )[0][0]
+        else:
+            # 对于其他版本，不使用sv_emb
+            audio = self.vq_model.decode(
+                pred_semantic, torch.LongTensor(phones2).to(self.device).unsqueeze(0), refers, speed=speed
+            )[0][0]
         
         # 音量归一化
         max_audio = torch.abs(audio).max()
@@ -558,9 +547,24 @@ class TTSCore:
         audio_int16 = (audio_np * 32767).astype(np.int16)
         
         return sr, audio_int16
+    
+    def get_bert_inf(self, phones: List[int], word2ph: List[int], norm_text: str, language: str) -> torch.Tensor:
+        """获取BERT推理特征 - 参考原始inference_webui.py实现"""
+        language = language.replace("all_", "")
+        if language == "zh":
+            bert = self.get_bert_feature(norm_text, word2ph)
+        else:
+            bert_dim = 1024 if self.version == "v1" else 768
+            bert = torch.zeros(
+                (bert_dim, len(phones)),
+                dtype=torch.float16 if self.is_half else torch.float32,
+            ).to(self.device)
+        return bert
+    
+    # ...existing code...
 
 
-# 全局TTS实例
+# 全局TTS实例管理
 _tts_instance = None
 
 

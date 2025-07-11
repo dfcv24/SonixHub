@@ -4,3 +4,21 @@ pyttsx3==2.90
 gTTS==2.3.2
 requests==2.31.0
 python-dotenv==1.0.0
+# TTS API服务依赖
+fastapi==0.104.1
+uvicorn==0.24.0
+pydantic==2.5.0
+python-multipart==0.0.6
+
+# 音频处理
+librosa==0.10.1
+soundfile==0.12.1
+numpy==1.24.3
+
+# 机器学习
+torch==2.0.1
+torchaudio==2.0.2
+transformers==4.35.0
+
+# 其他
+requests==2.31.0

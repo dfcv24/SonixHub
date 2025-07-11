@@ -88,18 +88,8 @@ def init_api_service():
         print(f"TTS核心模块初始化失败: {e}")
         return
     
-    # 设置默认参考音频（如果存在）
-    possible_refer_paths = [
-        "fanren150.wav",
-        "GPT-SoVITS/fanren150.wav",
-        "labixiaoxin.mp3"
-    ]
-    
-    for path in possible_refer_paths:
-        if os.path.exists(path):
-            default_refer_path = path
-            default_prompt_text = "一二三四五六七八九十"
-            break
+    default_refer_path = "GPT-SoVITS/output/slicer_opt/vocal_vocal_fanren_16.wav_10.wav_main_vocal.wav_10.wav_0000814400_0000939200.wav"
+    default_prompt_text  = ""
     
     print(f"API服务初始化完成")
     print(f"默认参考音频: {default_refer_path}")

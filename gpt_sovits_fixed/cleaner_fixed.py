@@ -57,13 +57,13 @@ def clean_special(text, language, special_s, target_symbol, version=None):
         language_module_map = {"zh": "chinese", "ja": "japanese", "en": "english"}
     else:
         symbols = symbols_v2.symbols
-        language_module_map = {"zh": "chinese2", "ja": "japanese", "en": "english", "ko": "korean", "yue": "cantonese"}
+        language_module_map = {"zh": "chinese2_fixed", "ja": "japanese", "en": "english", "ko": "korean", "yue": "cantonese"}
 
     """
     特殊静音段sp符号处理
     """
     text = text.replace(special_s, ",")
-    language_module = __import__("text." + language_module_map[language], fromlist=[language_module_map[language]])
+    language_module = __import__("gpt_sovits_fixed." + language_module_map[language], fromlist=[language_module_map[language]])
     norm_text = language_module.text_normalize(text)
     phones = language_module.g2p(norm_text)
     new_ph = []

@@ -20,7 +20,7 @@ def clean_text(text, language, version=None):
         language_module_map = {"zh": "chinese", "ja": "japanese", "en": "english"}
     else:
         symbols = symbols_v2.symbols
-        language_module_map = {"zh": "chinese2_fixed", "ja": "japanese", "en": "english", "ko": "korean", "yue": "cantonese"}
+        language_module_map = {"zh": "chinese2_fixed", "ja": "japanese", "en": "english_fixed", "ko": "korean", "yue": "cantonese"}
 
     if language not in language_module_map:
         language = "en"
@@ -57,7 +57,7 @@ def clean_special(text, language, special_s, target_symbol, version=None):
         language_module_map = {"zh": "chinese", "ja": "japanese", "en": "english"}
     else:
         symbols = symbols_v2.symbols
-        language_module_map = {"zh": "chinese2_fixed", "ja": "japanese", "en": "english", "ko": "korean", "yue": "cantonese"}
+        language_module_map = {"zh": "chinese2_fixed", "ja": "japanese", "en": "english_fixed", "ko": "korean", "yue": "cantonese"}
 
     """
     特殊静音段sp符号处理

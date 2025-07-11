@@ -471,13 +471,15 @@ class TTSCore:
         if not ref_free:
             # 处理参考文本
             prompt_text = prompt_text.strip("\n")
-            if prompt_text[-1] not in self.splits:
+            prompt_text = self._clean_text_input(prompt_text)  # 移除括号内文字
+            if prompt_text and prompt_text[-1] not in self.splits:
                 prompt_text += "。" if prompt_language != "en" else "."
             phones1, bert1, norm_text1 = get_phones_and_bert(prompt_text, prompt_language, self.version)
         
         # 处理目标文本
         text = text.strip("\n")
-        if text[-1] not in self.splits:
+        text = self._clean_text_input(text)  # 移除括号内文字
+        if text and text[-1] not in self.splits:
             text += "。" if text_language != "en" else "."
         
         phones2, bert2, norm_text2 = get_phones_and_bert(text, text_language, self.version)
@@ -561,7 +563,30 @@ class TTSCore:
             ).to(self.device)
         return bert
     
-    # ...existing code...
+    def _clean_text_input(self, text: str) -> str:
+        """
+        清理输入文本，移除括号内的修饰性文字
+        支持多种括号类型：()、[]、{}、【】、（）
+        """
+        import re
+        
+        # 定义各种括号的正则表达式
+        bracket_patterns = [
+            r'\([^)]*\)',      # 英文圆括号
+            r'（[^）]*）',      # 中文圆括号  
+            r'\[[^\]]*\]',     # 方括号
+            r'\{[^}]*\}',      # 花括号
+            r'【[^】]*】',      # 中文方括号
+        ]
+        
+        cleaned_text = text
+        for pattern in bracket_patterns:
+            cleaned_text = re.sub(pattern, '', cleaned_text)
+        
+        # 清理多余的空格
+        cleaned_text = re.sub(r'\s+', ' ', cleaned_text).strip()
+        
+        return cleaned_text
 
 
 # 全局TTS实例管理
